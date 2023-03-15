@@ -18,7 +18,7 @@ class Player {
     this.items = [];
 
     const image = new Image();
-    image.src = "img/schweindal.png";
+    image.src = "./img/schweindal.png";
 
     this.image = image;
     //set the pivot point to the center of the image
