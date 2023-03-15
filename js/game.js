@@ -18,7 +18,7 @@ class Player {
     this.items = [];
 
     const image = new Image();
-    image.src = "img/schweindal.png";
+    image.src = "img/Schweindal.png";
 
     this.image = image;
     //set the pivot point to the center of the image
@@ -60,7 +60,7 @@ class Player {
     //wiggle forward and back
     this.rotation = Math.sin(frame/10)/10;
     //up and down
-    this.y += Math.sin(frame/4)*3;
+    this.y += Math.sin(frame/10)*2;
 
 
   }
@@ -78,7 +78,7 @@ class Sword {
     this.pivotY = pivotY;
 
     const image = new Image();
-    image.src = "img/sword.png";
+    image.src = "img/Sword.png";
 
     this.image = image;
   }
@@ -97,7 +97,47 @@ class Sword {
   }
 }
 
+//create a game object
+class GameObject {
+  constructor(x,y,pivotX,pivotY
+              ,width,height,src){
+    this.x = x;
+    this.y = y-height;
+    this.pivotX = pivotX;
+    this.pivotY = pivotY;
+    this.width = width;
+    this.height = height;
+    this.rotation = 0;
+    const image = new Image();
+    image.src = src;
+    this.image = image;
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x+this.pivotX,this.y+this.pivotY);
+    ctx.rotate(this.rotation);
+    ctx.drawImage(this.image,-this.pivotX,-this.pivotY,this.width,this.height);
+    ctx.restore();
 
+  }
+
+}
+
+//create an enemy
+class Enemy extends GameObject {
+  constructor(x,y,pivotX,pivotY
+              ,width,height,src){
+    super(x,y,pivotX,pivotY
+              ,width,height,src);
+  }
+  update(){
+    this.rotation = Math.pow(Math.sin(frame/10),5)/10;
+    //up and down
+    //this.y += Math.sin(frame/20);
+    this.draw();
+  }
+
+}
 
 //create a ground
 class Box {
@@ -117,6 +157,7 @@ class Box {
 const player = new Player(100,canvas.height-groundheight,250,250);
 const ground = new Box(0,canvas.height-groundheight,canvas.width,groundheight);
 const sword = new Sword(300,300,35,200,70,220);
+const enemy = new Enemy(500,canvas.height-groundheight+40,100,250,200,400,"img/metzger.png");
 player.equip(sword,50,10);
 //animate
 function animate(){
@@ -125,7 +166,7 @@ function animate(){
   ctx.fillRect(0,0,canvas.width,canvas.height);
   ground.draw();
   player.update();
-
+enemy.update();
   requestAnimationFrame(animate);
 }
 
