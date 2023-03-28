@@ -17,6 +17,14 @@ html {
   line-height: 1.4;
 }
 
+p {
+  padding: 5px;
+  /* make the size bigger */
+  font-size: 1.2em;
+
+
+}
+
 /*
  * Remove text-shadow in selection highlight:
  * https://twitter.com/miketaylr/status/12228805301

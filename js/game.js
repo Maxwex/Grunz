@@ -1,13 +1,15 @@
 //create a canvas
 //debug mode
-const debug = true;
+const debug = false;
 let frame = 0;
 const groundheight = 150;
 const canvas = document.getElementById("canvas");
 const ctx= canvas.getContext("2d");
 canvas.width = 1200;
 canvas.height = 720;
-let deltaTime = 0;
+var deltaTime = 0;
+
+//onload
 
 //react to key presses
 const keys = [];
@@ -94,6 +96,11 @@ class GameObject {
 
     this.collider = collider;
   }
+  instantiate(image){
+    let clone = new Enemy(this.x,this.y,this.pivotX,this.pivotY,this.width,this.height,this.image.src);
+    this.image = image;
+    return clone;
+  }
   updateCollider(){
     //include the rotation of the parent
     let {x,y}= rotate(this.collider.xOffset, this.collider.yOffset, this.globalPosition.rotation);
@@ -147,13 +154,21 @@ class GameObject {
   update(){
 
     this.draw();
+
     if (this.collider){
-      this.updateCollider();
-      if (debug)
-      this.collider.draw();
+      this.collider.update();
+
     }
 
   }
+  destroy(){
+    this.children.forEach(child => {
+      child.destroy();
+    }
+    );
+    gameObjectsList.splice(gameObjectsList.indexOf(this),1);
+  }
+
 
 }
 
@@ -164,6 +179,7 @@ class Character extends GameObject{
     super(x,y,pivotX,pivotY
               ,width,height,src);
     this.activeWeapon = null;
+    this.blood = null;
   }
   draw(){
    super.draw();
@@ -187,8 +203,39 @@ class Character extends GameObject{
     item.y = -pivotY-item.pivotY;
 
     item.rotation = rotation*Math.PI/180;
-    this.activeWeapon = item;
+    if (item instanceof Weapon){
+      this.activeWeapon = item;
+
+    }
     super.addChild(item);
+  }
+  addBlood(blood,pivotX,pivotY){
+    this.blood = blood;
+    this.equip(blood,pivotX,pivotY)
+  }
+  onHit(damage){
+    console.log("ouch");
+  }
+  bleed(){
+    if (this.blood == null) return;
+    this.blood.start()
+  }
+  //check if the character is colliding with another character
+  collides(){
+    //loop through all the game characters
+    for (let i = 0; i < gameObjectsList.length; i++) {
+      //check if the game object is a character
+      if (gameObjectsList[i] instanceof Character){
+        //check if the character is colliding with the current character
+        if (gameObjectsList[i] !== this){
+          if (gameObjectsList[i].isColliding(this)){
+            return true
+            //return the colliding character
+          }
+        }
+      }
+    }
+    return false;
   }
 }
 
@@ -252,11 +299,11 @@ class Weapon extends GameObject {
     if (Date.now() - this.lastAttack < this.cooldown) return;
     //set the last attack time to now
     this.lastAttack = Date.now();
-    let targetX = 200;
+    let targetX = 100;
     let targetY = -100;
-    let targetRotation = 30*Math.PI/180;
+    let targetRotation = -30*Math.PI/180;
 
-    this.moveTowards(targetX, targetY, targetRotation, 0, 500, () => {
+    this.moveTowards(targetX, targetY, targetRotation, 0, 300, () => {
       this.moveTowards(-targetX, -targetY, -targetRotation, 0, 600);
     });
 
@@ -448,41 +495,115 @@ let startTime = Date.now();
   requestAnimationFrame(animater);
 }
 
-//add blood particles
-class Blood extends GameObject {
 
-  constructor(x,y,pivotX,pivotY
-              ,width,height,src){
-    super(x,y,pivotX,pivotY
-              ,width,height,src);
-    this.rotation = Math.random()*Math.PI*2;
+
+
+//particle class
+class Particle{
+  constructor(x,y,initialVx,initialVy,color,size,lifeTime){
     this.x = x;
     this.y = y;
-    this.vx = Math.random()*10-5;
-    this.vy = Math.random()*10-5;
-    this.alpha = 1;
+    this.color = color;
+    this.size = size;
+    this.vx = initialVx;
+    this.vy = initialVy;
+    this.lifetime = lifeTime
+
   }
   draw(){
-    super.draw();
+     ctx.fillStyle = this.color;
+    ctx.fillRect(this.x,this.y,this.size,this.size);
   }
   update(){
-    super.update();
+    if (this.lifetime<0) return;
+    this.lifetime -= deltaTime;
     this.x += this.vx;
     this.y += this.vy;
-    this.alpha -= 0.01;
-    if (this.alpha < 0) this.alpha = 0;
+    //gravity
+    var a = 0.19;
+    this.vy += a;
+    this.draw();
+  }
+  revive(x,y,initialVx,initialVy,lifeTime){
+    this.x = x;
+    this.y = y;
+    this.lifetime = lifeTime;
+    this.vx = initialVx;
+    this.vy = initialVy;
   }
 
 }
-const bloods = [];
-//make the blood appear when the enemy is hit
-function blood(x,y){
-  for (let i = 0; i < 10; i++){
-    let blood = new Blood(x,y,0,0,10,10,"red");
-    bloods.push(blood);
+
+//add blood particles
+class Blood extends Particle {
+  constructor(x, y, vx, vy, color, size, lifeTime) {
+    super(x, y, vx, vy,color,size,lifeTime);
+
+  }
+
+  draw() {
+    super.draw();
+  }
+  update() {
+    super.update();
   }
 
 }
+
+class ParticleSystem extends GameObject{
+  constructor(x,y,size) {
+    super(x,y,0,0,0,0,"");
+    this.particles = [];
+    this.size = size;
+    this.running = false;
+    this.initiated = false;
+    this.lifeTime = 1000;
+this.count = 0;
+
+  }
+  draw() {
+
+  }
+  update() {
+    if (!this.running) return;
+    this.count+=deltaTime;
+    for (let i = 0; i < this.particles.length; i++) {
+      this.particles[i].update();
+    }
+    super.update();
+if (this.count>this.lifeTime){
+  this.stop();
+
+}
+  }
+
+  init() {
+    this.initiated = true;
+    console.log("init");
+    for (let i = 0; i < this.size; i++) {
+      var random = Math.random()*10 - 5;
+    this.particles[i] = new Blood(this.globalPosition.x, this.globalPosition.y, Math.sin(random)*Math.random()*5 , Math.cos(random)*Math.random()*5, "red", 5, this.lifeTime);    }
+  }
+  stop() {
+    this.running = false;
+  }
+  start() {
+    this.running = true;
+    this.count = 0;
+    if (this.initiated){
+      for (let i = 0; i < this.size; i++) {
+        var random = Math.random()*Math.PI*2 - Math.PI;
+        this.particles[i].revive(this.globalPosition.x, this.globalPosition.y, Math.sin(random)*Math.random()*5 , Math.cos(random)*Math.random()*5, this.lifeTime);
+      }
+    } else {
+      this.init()
+    }
+
+  }
+
+}
+
+
 
 //create a sword
 class Sword extends Weapon {
@@ -510,6 +631,7 @@ class Enemy extends Character {
               ,width,height,src){
     super(x,y,pivotX,pivotY
               ,width,height,src);
+    this.ishit = false;
   }
   draw(){
     super.draw()
@@ -518,17 +640,38 @@ class Enemy extends Character {
     super.update();
     this.rotation = Math.pow(Math.sin(frame/10),5)/10;
     //up and down
-    this.x += Math.sin(frame/10)*3;
+    //this.x += Math.sin(frame/10)*3;
+    //dont move through the player
+    if ((this.x>player.x+300)&&!this.collides()){
+      this.move()
+    }
+
+    this.checkHit()
+  }
+  move(){
+    this.x -= deltaTime/10;
   }
   //when the enemy is hit
   hit(){
     //make the enemy bleed
-    blood(this.x,this.y);
+
+    if (this.blood.running) return;
+    this.bleed()
     //make the enemy jump up
 
   }
+  //check if the enemy is hit
+  checkHit(){
+    //check if the enemy is hit
+    if (this.collider == null) return;
+    if (sword.collider.isColliding(this.collider)){
+      this.hit();
+      this.ishit = true;
+    }else {
+      this.ishit = false;
+    }
+  }
 }
-
 
 
 
@@ -565,6 +708,7 @@ class SphereCollider {
     this.xOffset = 0;
     this.radius = radius;
     this.parent = null;
+
   }
   draw(){
     ctx.beginPath();
@@ -572,8 +716,10 @@ class SphereCollider {
     ctx.stroke();
   }
   update(){
-    this.x = this.parent.globalX + this.xOffset;
-    this.y = this.parent.globalY + this.yOffset;
+    let {x,y}= rotate(this.xOffset,this.yOffset,this.parent.globalPosition.rotation);
+    this.x = this.parent.globalPosition.x+ x;
+    this.y = this.parent.globalPosition.y+ y;
+    if (debug) this.draw();
   }
   isColliding(other){
     let distance = Math.sqrt((this.x-other.x)**2+(this.y-other.y)**2);
@@ -592,6 +738,29 @@ function rotate(x,y,angle){
   }
 }
 
+//spawner
+const spawner = {
+  enemies : [],
+  count : 0,
+  spawnEnemie: function () {
+    return new Enemy(1500,520,100,250,200,400,"img/metzger.png");
+  } ,
+
+  manageEnemies: function () {
+    //create a new enemy every 2 seconds or when there are less than 3 enemies
+    if ( this.count>4000&& this.enemies.length<3){
+      //spawn a new enemy
+      let enemie = this.spawnEnemie();
+      //add collider
+      let collider = new SphereCollider(80);
+      enemie.addCollider(collider,10);
+      this.enemies.push(enemie);
+      this.count = 0;
+    }
+    this.count += deltaTime;
+
+  }
+}
 
 
 //create a player
@@ -600,28 +769,34 @@ const ground = new GameObject(0,620,0,0,canvas.width,groundheight, "green");
 const player = new Player(200,600,150,250,300,300,"img/Schweindal.png");
 const sword = new Sword(0,0,35,200,70,220,"img/Sword.png");
 const bat = new Bat(0,0,20,240,40,200,"img/Bat.png");
-const enemy = new Enemy(500,520,100,250,200,400,"img/metzger.png");
+const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
 const collider = new SphereCollider(50);
+const enemyCollider = new SphereCollider(80);
+enemy.addCollider(enemyCollider,10,-40);
 sword.addCollider(new SphereCollider(10),0,-180);
 
 player.equip(sword,40,10,95);
 player.addCollider(collider,100,-40 );
 enemy.equip(bat,-20,30);
-console.log(collider.x+" "+collider.y);
-blood(100,100);
+const particles = new ParticleSystem(100,100,1300);
+enemy.addBlood(particles,0,0);
 
-let lastTime = 0;
+//enemy.addChild(particles);
+let lastTime = Date.now();
 //animate
 function animate(){
   //calculate the delta time
   let now = Date.now();
   deltaTime = now - lastTime;
   lastTime = now;
+  //console.log("frames " + 1000/deltaTime);
+  spawner.manageEnemies()
   frame++;
   ctx.fillStyle = "skyblue";
   ctx.fillRect(0,0,canvas.width,canvas.height);
   //read the input
   updateGameobjects();
+
   //set the frame rate to 60fps
 
 
