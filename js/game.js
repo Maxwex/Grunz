@@ -1,12 +1,19 @@
 //create a canvas
 //debug mode
-const debug = false;
+const debug = true;
 let frame = 0;
 const groundheight = 150;
 const canvas = document.getElementById("canvas");
 const ctx= canvas.getContext("2d");
 canvas.width = 1200;
 canvas.height = 720;
+//create a canvas layer for the ui on top canvas
+const canvasUI = document.getElementById("canvasUI");
+const ctxUI= canvasUI.getContext("2d");
+canvasUI.width = 1200;
+canvasUI.height = 720;
+ctxUI.fillStyle = "black";
+ctxUI.fillRect(0,0,80,200);
 var deltaTime = 0;
 
 //onload
@@ -36,8 +43,29 @@ document.addEventListener("keydown", function(e){
   }
 });
 
+function updateUi(){
+  ctxUI.clearRect(0,0,canvasUI.width,canvasUI.height);
+  ctxUI.fillStyle = "orange";
+  ctxUI.fillRect(0,0,canvasUI.width,50);
+  ctxUI.fillStyle = "white";
+  ctxUI.font = "20px Arial";
+  healthbar.draw();
+}
 
-
+function sound(src) {
+  this.sound = document.createElement("audio");
+  this.sound.src = src;
+  this.sound.setAttribute("preload", "auto");
+  this.sound.setAttribute("controls", "none");
+  this.sound.style.display = "none";
+  document.body.appendChild(this.sound);
+  this.play = function(){
+    this.sound.play();
+  }
+  this.stop = function(){
+    this.sound.pause();
+  }
+}
 // game objects list
 const gameObjectsList = [];
 
@@ -117,16 +145,59 @@ class GameObject {
     child.parent = this;
     this.children.push(child);
   }
+  moveTowards(x,y,rotation,time,duration,callback=0){
+    //start time
+    let startTime = Date.now();
+    var distX = 0;
+    var distY = 0;
+    var distRot = 0;
+    var initialRotation = this.rotation;
+    var initialOffsetX = this.parentOffsetX;
+    var initialOffsetY = this.parentOffsetY;
+    //the animation function
+    let animation = () => {
+      //calculate the time
+      let time = Date.now()-startTime;
+      //if the time is greater than the duration
+      if (time>duration){
+        //set the sword to the final position
+        this.parentOffsetX = x+initialOffsetX;
+        this.parentOffsetY = y+initialOffsetY;
+        this.rotation = (rotation+initialRotation);
+        //go to initial position
+        if (callback)
+          callback()
+        return;
+      }
+      //move the sword to the right for 1 second and back
+      let newX = Math.round(smoothstep(0,x,time/duration)-distX);
+      let newY = (smoothstep(0,y,time/duration)-distY)|0;
+      let newRot = smoothstep(0,rotation,time/duration)-distRot;
 
+      distX += newX;
+      distY += newY;
+      distRot += newRot;
+      this.parentOffsetX+=newX;
+      this.parentOffsetY+=newY;
+      this.rotation+=newRot;
+
+      //call the animation function again
+      requestAnimationFrame(animation);
+    }
+    //call the animation function
+    animation();
+
+  }
   draw(){
+    ctx.save();
+    ctx.translate(this.globalPosition.x, this.globalPosition.y);
+    ctx.rotate(this.globalPosition.rotation);
     if (this.color!=null){
 
       ctx.fillStyle = this.color;
-      ctx.fillRect(this.x,this.y,this.width,this.height);
+      ctx.fillRect(-this.pivotX,-this.pivotY,this.width,this.height);
     }else {
-      ctx.save();
-      ctx.translate(this.globalPosition.x, this.globalPosition.y);
-      ctx.rotate(this.globalPosition.rotation);
+
       ctx.drawImage(this.image, -this.pivotX, -this.pivotY, this.width, this.height);
 
 
@@ -134,10 +205,10 @@ class GameObject {
         ctx.fillStyle = "red";
         ctx.fillRect(0, 0, 5, 5);
       }
-      ctx.restore();
+
 
     }
-
+    ctx.restore();
   }
   drawInfront (){
     ctx.save();
@@ -180,6 +251,40 @@ class Character extends GameObject{
               ,width,height,src);
     this.activeWeapon = null;
     this.blood = null;
+    this.ishit = false;
+    this.health = 100;
+    this.dead = false;
+    this.deathSound = null;
+    this.gravity = 0.5;
+    this.grounded = true;
+    this.jumpSpeed = 5;
+    this.ypos = y;
+    this.velocity = 0;
+  }
+  jump(){
+    if (!this.grounded) return;
+      this.velocity = -this.jumpSpeed;
+  }
+  playDeathSound(){
+    if (this.deathSound == null) return;
+    this.deathSound.play();
+  }
+  takeDamage(damage){
+    if (this.dead) return;
+    this.jump()
+    if (damage>this.health){
+      this.health = 0;
+      this.dead = true;
+      this.onDeath();
+
+    }else{
+      this.health-=damage;
+    }
+
+  }
+  onDeath(){
+    this.playDeathSound();
+    this.destroy();
   }
   draw(){
    super.draw();
@@ -189,7 +294,14 @@ class Character extends GameObject{
 
   update(){
     super.update();
-
+    this.velocity += this.gravity;
+    if (this.ypos>this.y+this.velocity){
+      this.y+=this.velocity;
+      this.grounded = false;
+    }else {
+      this.y = this.ypos;
+      this.grounded = true;
+    }
   }
   useWeapon(){
     if (this.activeWeapon == null) return;
@@ -245,7 +357,7 @@ class Player extends Character {
               ,width,height,src){
     super(x,y,pivotX,pivotY
               ,width,height,src);
-
+    this.deathSound = pigdeath;
   }
 
   draw(){
@@ -255,18 +367,34 @@ class Player extends Character {
   update(){
     super.update();
     this.walk()
+    this.checkCollision();
 
   }
-  jump(){
-    this.y -= 10;
-  }
+
 
   //wiggly walking animation
   walk(){
     //wiggle forward and back
     this.rotation = Math.sin(frame/10)/15;
     //up and down
-    this.y += Math.sin(frame/10);
+    this.y += Math.sin(frame/10)|0;
+  }
+  checkCollision(){
+    if (this.isColliding(bat)){
+      if (this.ishit) return;
+
+      this.takeDamage(10);
+      this.ishit = true;
+      return;
+    }
+      this.ishit = false;
+
+  }
+  takeDamage(damage) {
+      super.takeDamage(damage);
+      healthbar.health = this.health;
+      this.bleed();
+updateUi()
   }
 
 
@@ -295,19 +423,8 @@ class Weapon extends GameObject {
   }
 
   strike() {
-    //check if the weapon is on cooldown
-    if (Date.now() - this.lastAttack < this.cooldown) return;
-    //set the last attack time to now
-    this.lastAttack = Date.now();
-    let targetX = 100;
-    let targetY = -100;
-    let targetRotation = -30*Math.PI/180;
 
-    this.moveTowards(targetX, targetY, targetRotation, 0, 300, () => {
-      this.moveTowards(-targetX, -targetY, -targetRotation, 0, 600);
-    });
-
-    //punch the sword forward
+console.log("s")   //punch the sword forward
     //move the sword to the right for 1 second
 
 
@@ -322,50 +439,7 @@ class Weapon extends GameObject {
   }
 
   //function to move the sword to a position and rotate it
-  moveTowards(x,y,rotation,time,duration,callback=0){
-    //start time
-    let startTime = Date.now();
-    var distX = 0;
-    var distY = 0;
-    var distRot = 0;
-    var initialRotation = this.rotation;
-    var initialOffsetX = this.parentOffsetX;
-    var initialOffsetY = this.parentOffsetY;
-    //the animation function
-    let animation = () => {
-      //calculate the time
-      let time = Date.now()-startTime;
-      //if the time is greater than the duration
-      if (time>duration){
-        //set the sword to the final position
-        this.parentOffsetX = x+initialOffsetX;
-        this.parentOffsetY = y+initialOffsetY;
-        this.rotation = (rotation+initialRotation);
-        //go to initial position
-        if (callback)
-        callback()
-        return;
-      }
-      //move the sword to the right for 1 second and back
-      let newX = smoothstep(0,x,time/duration)-distX;
-      let newY = smoothstep(0,y,time/duration)-distY;
-      let newRot = smoothstep(0,rotation,time/duration)-distRot;
 
-      distX += newX;
-      distY += newY;
-      distRot += newRot;
-      this.parentOffsetX+=newX;
-      this.parentOffsetY+=newY;
-      this.rotation+=newRot;
-console.log(distRot);
-
-      //call the animation function again
-      requestAnimationFrame(animation);
-    }
-    //call the animation function
-    animation();
-
-  }
 
 }
 //animation class
@@ -445,10 +519,11 @@ class Bat extends Weapon {
 
     //punch the sword forward
     //move the sword to the right for 1 second
-    animations(1000, (time, duration) => {
-        this.swing(time, duration);
-      }
-    );
+    var rotation = -80*Math.PI/180;
+    this.moveTowards(0, 0, rotation, 0, 300,
+      () => {
+      this.moveTowards(0, 0, -rotation, 1000, 700)
+      });
   }
   swing(time, duration) {
     //move the sword to the right for 1 second and back
@@ -602,6 +677,29 @@ if (this.count>this.lifeTime){
   }
 
 }
+//create a health bar
+class HealthBar extends GameObject{
+
+  constructor(x,y,pivotX,pivotY, width,height) {
+    super(x, y, pivotX, pivotY, width, height, "black");
+    this.health = 100;
+    this.maxHealth = 100;
+    this.border = 4;
+
+  }
+
+
+  draw() {
+    //super.draw();
+    ctxUI.fillStyle = "black";
+    ctxUI.fillRect(this.globalPosition.x, this.globalPosition.y, this.width, this.height);
+    ctxUI.fillStyle = "red";
+    ctxUI.fillRect(this.globalPosition.x + this.border, this.globalPosition.y + this.border, this.width - this.border*2, this.height - this.border*2);
+    ctxUI.fillStyle = "green";
+    ctxUI.fillRect(this.globalPosition.x + this.border, this.globalPosition.y + this.border, (this.width - this.border*2) * (this.health/this.maxHealth), this.height - this.border*2);
+
+  }
+}
 
 
 
@@ -622,6 +720,22 @@ class Sword extends Weapon {
     this.rotation += Math.sin(frame/10)/30
 
   }
+  strike() {
+    if (Date.now() - this.lastAttack < this.cooldown) return;
+    //set the last attack time to now
+    this.lastAttack = Date.now();
+    super.strike();
+    //check if the weapon is on cooldown
+
+    let targetX = 100;
+    let targetY = -100;
+    let targetRotation = -30*Math.PI/180;
+
+    this.moveTowards(targetX, targetY, targetRotation, 0, 300, () => {
+      this.moveTowards(-targetX, -targetY, -targetRotation, 0, 600);
+    });
+
+  }
 }
 
 
@@ -637,16 +751,17 @@ class Enemy extends Character {
     super.draw()
   }
   update(){
+    this.checkHit()
+
     super.update();
-    this.rotation = Math.pow(Math.sin(frame/10),5)/10;
+
+    //this.rotation = Math.pow(Math.sin(frame/10),5)/10;
     //up and down
     //this.x += Math.sin(frame/10)*3;
     //dont move through the player
     if ((this.x>player.x+300)&&!this.collides()){
       this.move()
     }
-
-    this.checkHit()
   }
   move(){
     this.x -= deltaTime/10;
@@ -655,21 +770,35 @@ class Enemy extends Character {
   hit(){
     //make the enemy bleed
 
-    if (this.blood.running) return;
+
     this.bleed()
     //make the enemy jump up
-
+    this.jump()
+    console.log("hit")
   }
+  jump(){
+    this.dieAnimation()
+  }
+
   //check if the enemy is hit
   checkHit(){
     //check if the enemy is hit
     if (this.collider == null) return;
     if (sword.collider.isColliding(this.collider)){
-      this.hit();
+      if (!this.ishit) this.hit();
       this.ishit = true;
     }else {
       this.ishit = false;
     }
+  }
+  die(){
+    dieAnimation()
+
+  }
+  dieAnimation(){
+    //fade out
+    this.image.alpha -= 0.61;
+
   }
 }
 
@@ -733,8 +862,9 @@ function rotate(x,y,angle){
   let cos = Math.cos(angle);
   let sin = Math.sin(angle);
   return {
-    x: x*cos - y*sin,
-    y: x*sin + y*cos
+    //round to int using bitwise or
+    x: x*cos - y*sin | 0,
+    y: x*sin + y*cos | 0
   }
 }
 
@@ -748,7 +878,7 @@ const spawner = {
 
   manageEnemies: function () {
     //create a new enemy every 2 seconds or when there are less than 3 enemies
-    if ( this.count>4000&& this.enemies.length<3){
+    if ( this.count>4000&& this.enemies.length<1){
       //spawn a new enemy
       let enemie = this.spawnEnemie();
       //add collider
@@ -764,33 +894,36 @@ const spawner = {
 
 
 //create a player
+const pigdeath = new sound("sounds/death.wav");
 const hills = new Hills(0,700,0,0,600,300,"img/hill1.png");
 const ground = new GameObject(0,620,0,0,canvas.width,groundheight, "green");
 const player = new Player(200,600,150,250,300,300,"img/Schweindal.png");
 const sword = new Sword(0,0,35,200,70,220,"img/Sword.png");
-const bat = new Bat(0,0,20,240,40,200,"img/Bat.png");
+const bat = new Bat(0,0,18,180,36,200,"img/Bat.png");
 const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
 const collider = new SphereCollider(50);
 const enemyCollider = new SphereCollider(80);
+const pigParticle = new ParticleSystem(0,0,130);
+player.addBlood(pigParticle,100,-100);
+bat.addCollider(new SphereCollider(20),0,-160);
 enemy.addCollider(enemyCollider,10,-40);
 sword.addCollider(new SphereCollider(10),0,-180);
-
+const healthbar = new HealthBar(20,15,100,50,200,20);
 player.equip(sword,40,10,95);
 player.addCollider(collider,100,-40 );
-enemy.equip(bat,-20,30);
+enemy.equip(bat,-30,-10,-10);
 const particles = new ParticleSystem(100,100,1300);
 enemy.addBlood(particles,0,0);
 
 //enemy.addChild(particles);
 let lastTime = Date.now();
-//animate
+updateUi()
 function animate(){
   //calculate the delta time
   let now = Date.now();
   deltaTime = now - lastTime;
   lastTime = now;
-  //console.log("frames " + 1000/deltaTime);
-  spawner.manageEnemies()
+  //spawner.manageEnemies()
   frame++;
   ctx.fillStyle = "skyblue";
   ctx.fillRect(0,0,canvas.width,canvas.height);
