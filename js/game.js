@@ -1,57 +1,43 @@
 //create a canvas
 //debug mode
-const debug = true;
+const debug = false;
 let frame = 0;
 const groundheight = 150;
-const canvas = document.getElementById("canvas");
-const ctx= canvas.getContext("2d");
-canvas.width = 1200;
-canvas.height = 720;
-//create a canvas layer for the ui on top canvas
-const canvasUI = document.getElementById("canvasUI");
-const ctxUI= canvasUI.getContext("2d");
-canvasUI.width = 1200;
-canvasUI.height = 720;
-ctxUI.fillStyle = "black";
-ctxUI.fillRect(0,0,80,200);
-var deltaTime = 0;
 
-//onload
+var player;
+var bat;
+var ground;
+var sword;
+var healthbar;
+//const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
+//create a popup function with a restart button
 
-//react to key presses
-const keys = [];
-document.addEventListener("keydown", function(e){
-  switch(e.keyCode){
-  // spacebar
-  case 32:
-    player.useWeapon();
-    break;
-    //left mouse button
-  case 1:
-    player.useWeapon();
-    break;
-  // left arrow
-  case 37:
-    enemy.useWeapon()
-    break;
-  // up arrow
-  case 38:
-    player.walk();
-    break;
-  default:
-    break;
+
+
+//add user input to make the player attack when the spacebar is pressed
+document.addEventListener("keydown", function(event){
+
+  if (event.keyCode == 32){
+    if (debug)
+      console.log("spacebar pressed")
+    player.useWeapon()
   }
-});
 
-function updateUi(){
-  ctxUI.clearRect(0,0,canvasUI.width,canvasUI.height);
-  ctxUI.fillStyle = "orange";
-  ctxUI.fillRect(0,0,canvasUI.width,50);
-  ctxUI.fillStyle = "white";
-  ctxUI.font = "20px Arial";
-  healthbar.draw();
 }
+);
 
+
+var deltaTime = 0;
+let lastTime = Date.now();
+
+var myGame;
+
+//create a sound table
+var soundTable = {
+  "pigdeath": new sound("sounds/death.wav"),
+  "enemyHit": new sound("sounds/enemyHit.mp3"),
+  "enemyDead": new sound("sounds/enemyDead.mp3"),
+}
 function sound(src) {
   this.sound = document.createElement("audio");
   this.sound.src = src;
@@ -66,17 +52,122 @@ function sound(src) {
     this.sound.pause();
   }
 }
-// game objects list
-const gameObjectsList = [];
-
-function updateGameobjects(){
-  gameObjectsList.forEach(gameObject => {
-    //if (gameObject.hasParent) return;
-
-    gameObject.update();
-    //gameObject.draw();
-  });
+//function to start the game
+function startGame(){
+  myGame = new Game(1200,700);
+  myGame.start(myGame);
+  soundTable["pigdeath"].play();
+  initializeGameObjects();
 }
+
+function initializeGameObjects(){
+
+  ground = new GameObject(0,620,0,0,myGame.canvas.width,groundheight, "green");
+  healthbar =new HealthBar(20,15,100,50,200,20);
+  bat  = new Bat(0,0,18,180,36,200,"img/Bat.png");
+  player =new Player(200,600,150,250,300,300,"img/Schweindal.png");
+  player.addCollider(new SphereCollider(50),100,-50);
+  sword = new Sword(0,0,35,200,70,220,"img/Sword.png");
+  sword.damage = 40;
+  sword.addCollider(new SphereCollider(10),0,-180);
+  const pigParticle = new ParticleSystem(0,0,130);
+  player.addBlood(pigParticle,100,-100);
+  player.equip(sword,40,10,95);
+
+
+}
+class Game{
+  constructor(width,height){
+    this.canvas = document.getElementById("canvas");
+    this.ctx= this.canvas.getContext("2d");
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.canvasUI = document.getElementById("canvasUI");
+    this.ctxUI= this.canvasUI.getContext("2d");
+    this.canvasUI.width = width;
+    this.canvasUI.height = height;
+
+    this.gameObjectsList= [];
+    this.weaponList = [];
+
+    this.enemieCount = 0;
+    this.over = false;
+
+  }
+  reorganizeGameObjects(){
+    this.gameObjectsList.sort(function(a,b){
+      return a.zIndex - b.zIndex;
+    })
+  }
+  drawBackground() {
+    this.ctx.fillStyle = "skyblue";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+  }
+  updateGameobjects(){
+    this.gameObjectsList.forEach(gameObject => {
+      //if (gameObject.hasParent) return;
+
+      gameObject.update();
+      //gameObject.draw();
+    });
+  }
+  start(){
+    updateUi()
+    function gameLoop(game){
+      //
+      deltaTime = Date.now() - lastTime;
+      lastTime = Date.now();
+      frame++;
+
+      myGame.drawBackground();
+      spawner.manageEnemies()
+      //update the game
+      myGame.updateGameobjects();
+
+
+      if (myGame.over) return;
+
+      requestAnimationFrame(gameLoop);
+    }
+    gameLoop(this);
+  }
+  restart(){
+    this.gameObjectsList = [];
+    this.weaponList = [];
+    this.enemieCount = 0;
+    this.over = false;
+    initializeGameObjects();
+    this.start();
+  }
+  gameOver(){
+    this.over = true;
+    //game over popup
+    const popup = new Popup("Game Over", "butt","Restart", () => {
+      //restart the game
+      this.restart();
+    });
+  }
+
+
+}
+
+
+
+
+
+
+function updateUi(){
+  var ctxUI = myGame.ctxUI;
+  ctxUI.clearRect(0,0,myGame.canvasUI.width,myGame.canvasUI.height);
+  ctxUI.fillStyle = "orange";
+  ctxUI.fillRect(0,0,myGame.canvasUI.width,50);
+  ctxUI.fillStyle = "white";
+  ctxUI.font = "20px Arial";
+  //healthbar.draw();
+}
+
+
 
 //create a game object
 class GameObject {
@@ -92,6 +183,7 @@ class GameObject {
     this.height = height;
     this.rotation = 0;
     this.color = null;
+    this.zIndex = 0;
     //check if src is the path to an image
     if(src.toString().includes(".png") || src.toString().includes(".jpg")){
       const image = new Image();
@@ -105,7 +197,7 @@ class GameObject {
     this.parent = null;
     this.hasParent = false;
     this.collider = null;
-    gameObjectsList.push(this);
+    myGame.gameObjectsList.push(this);
   }
   get globalPosition(){
     if (this.parent != null){
@@ -144,6 +236,57 @@ class GameObject {
     child.hasParent = true;
     child.parent = this;
     this.children.push(child);
+  }
+  rotateTowards(rotation,time,duration,callback=null){
+    //start time
+    let startTime = Date.now();
+    var initialRotation = this.rotation;
+    var distRot = 0;
+    //the animation function
+    let animation = () => {
+      //calculate the time
+      let time = Date.now()-startTime;
+      //if the time is greater than the duration
+      if (time>duration){
+         if (callback != null) callback();
+        return;
+      }
+      //move the sword to the right for 1 second and back
+      let newRot = smoothstep(0,rotation,time/duration)-distRot;
+      distRot += newRot;
+      this.rotation +=newRot;
+      //call the function again
+      requestAnimationFrame(animation);
+    }
+    //call the function
+    animation();
+  }
+  moveLinear(x,y,time,duration){
+    //start time
+    let startTime = Date.now();
+    var distX = 0;
+    var distY = 0;
+
+    //the animation function
+    let animation = () => {
+      //calculate the time
+      let time = Date.now()-startTime;
+      //if the time is greater than the duration
+      if (time>duration){
+        return;
+      }
+      //move the sword to the right for 1 second and back
+      let newX = smoothstep(0,x,time/duration)-distX;
+      let newY = smoothstep(0,y,time/duration)-distY;
+      distX += newX;
+      distY += newY;
+      this.x +=newX
+      this.y +=newY
+      //call the function again
+      requestAnimationFrame(animation);
+    }
+    //call the function
+    animation();
   }
   moveTowards(x,y,rotation,time,duration,callback=0){
     //start time
@@ -189,6 +332,7 @@ class GameObject {
 
   }
   draw(){
+    let ctx= myGame.ctx;
     ctx.save();
     ctx.translate(this.globalPosition.x, this.globalPosition.y);
     ctx.rotate(this.globalPosition.rotation);
@@ -237,7 +381,7 @@ class GameObject {
       child.destroy();
     }
     );
-    gameObjectsList.splice(gameObjectsList.indexOf(this),1);
+    myGame.gameObjectsList.splice(myGame.gameObjectsList.indexOf(this),1);
   }
 
 
@@ -260,6 +404,7 @@ class Character extends GameObject{
     this.jumpSpeed = 5;
     this.ypos = y;
     this.velocity = 0;
+    this.affectedByGround= true;
   }
   jump(){
     if (!this.grounded) return;
@@ -272,10 +417,11 @@ class Character extends GameObject{
   takeDamage(damage){
     if (this.dead) return;
     this.jump()
-    if (damage>this.health){
+    if (damage>=this.health){
       this.health = 0;
       this.dead = true;
       this.onDeath();
+
 
     }else{
       this.health-=damage;
@@ -283,8 +429,10 @@ class Character extends GameObject{
 
   }
   onDeath(){
+    this.dead = true;
     this.playDeathSound();
     this.destroy();
+
   }
   draw(){
    super.draw();
@@ -295,7 +443,7 @@ class Character extends GameObject{
   update(){
     super.update();
     this.velocity += this.gravity;
-    if (this.ypos>this.y+this.velocity){
+    if (this.ypos>this.y+this.velocity||!this.affectedByGround){
       this.y+=this.velocity;
       this.grounded = false;
     }else {
@@ -332,15 +480,16 @@ class Character extends GameObject{
     if (this.blood == null) return;
     this.blood.start()
   }
+
   //check if the character is colliding with another character
   collides(){
     //loop through all the game characters
-    for (let i = 0; i < gameObjectsList.length; i++) {
+    for (let i = 0; i < myGame.gameObjectsList.length; i++) {
       //check if the game object is a character
-      if (gameObjectsList[i] instanceof Character){
+      if ( myGame.gameObjectsList[i] instanceof Character){
         //check if the character is colliding with the current character
-        if (gameObjectsList[i] !== this){
-          if (gameObjectsList[i].isColliding(this)){
+        if ( myGame.gameObjectsList[i] !== this){
+          if ( myGame.gameObjectsList[i].isColliding(this)&&this.zIndex> myGame.gameObjectsList[i].zIndex){
             return true
             //return the colliding character
           }
@@ -357,7 +506,7 @@ class Player extends Character {
               ,width,height,src){
     super(x,y,pivotX,pivotY
               ,width,height,src);
-    this.deathSound = pigdeath;
+    //this.deathSound = pigdeath;
   }
 
   draw(){
@@ -368,9 +517,12 @@ class Player extends Character {
     super.update();
     this.walk()
     this.checkCollision();
+    console.log("GRUNT");
 
   }
-
+  onDeath() {
+    myGame.gameOver();
+  }
 
   //wiggly walking animation
   walk(){
@@ -380,21 +532,32 @@ class Player extends Character {
     this.y += Math.sin(frame/10)|0;
   }
   checkCollision(){
-    if (this.isColliding(bat)){
-      if (this.ishit) return;
-
-      this.takeDamage(10);
-      this.ishit = true;
-      return;
+    //loop through all the weapons
+    for (let i = 0; i < myGame.weaponList.length; i++) {
+      //check if the weapon is colliding with the player
+      if ( myGame.weaponList[i].isColliding(this)){
+        //if the weapon is colliding with the player
+        if (this.ishit) return;
+        //take damage
+        this.takeDamage(myGame.weaponList[i].damage);
+        this.ishit = true;
+        //play the blood animation
+        this.bleed();
+        //update the UI
+        updateUi();
+        return;
+      }
     }
-      this.ishit = false;
+    this.ishit = false;
+
+
 
   }
   takeDamage(damage) {
       super.takeDamage(damage);
       healthbar.health = this.health;
       this.bleed();
-updateUi()
+      updateUi()
   }
 
 
@@ -406,6 +569,8 @@ class Weapon extends GameObject {
     this.isAttacking = false;
     this.cooldown = 1000;
     this.lastAttack = 0;
+    this.damage = 10;
+    myGame.weaponList.push(this);
   }
 
   draw() {
@@ -417,28 +582,15 @@ class Weapon extends GameObject {
 
   }
 
-  animate() {
-    //this.rotation += -Math.sin(frame/10)/12;
-    this.strike();
-  }
 
   strike() {
 
-console.log("s")   //punch the sword forward
-    //move the sword to the right for 1 second
-
 
   }
-
-
-  //function to move the sword to a position and rotate it
-  moveTo(x,y,rotation,time,duration){
-
-    this.parentOffsetX+=smoothstepDerivative(0,x,time/duration);
-    this.parentOffsetY+=smoothstepDerivative(0,y,time/duration);
+  destroy() {
+    super.destroy();
+    myGame.weaponList.splice(myGame.weaponList.indexOf(this), 1);
   }
-
-  //function to move the sword to a position and rotate it
 
 
 }
@@ -497,7 +649,7 @@ class Bat extends Weapon {
   constructor(x, y, pivotX, pivotY, width, height, src) {
     super(x, y, pivotX, pivotY, width, height, src);
     this.isAttacking = false;
-    this.cooldown = 1000;
+    this.cooldown = 2000;
     this.lastAttack = 0;
 
   }
@@ -525,15 +677,7 @@ class Bat extends Weapon {
       this.moveTowards(0, 0, -rotation, 1000, 700)
       });
   }
-  swing(time, duration) {
-    //move the sword to the right for 1 second and back
-    if (time > duration / 2) {
-      this.rotation = smoothstep(-Math.PI/2, 0, (time / duration)*2-1 );
-      return;
-    }
-    this.rotation = smoothstep(0, -Math.PI/2, (time / duration)*2);
 
-  }
 }
 
 //lerp function
@@ -586,6 +730,7 @@ class Particle{
 
   }
   draw(){
+    let ctx = myGame.ctx;
      ctx.fillStyle = this.color;
     ctx.fillRect(this.x,this.y,this.size,this.size);
   }
@@ -688,9 +833,13 @@ class HealthBar extends GameObject{
 
   }
 
+update() {
+  super.update();
+}
 
   draw() {
     //super.draw();
+    let ctxUI = myGame.ctxUI;
     ctxUI.fillStyle = "black";
     ctxUI.fillRect(this.globalPosition.x, this.globalPosition.y, this.width, this.height);
     ctxUI.fillStyle = "red";
@@ -746,38 +895,55 @@ class Enemy extends Character {
     super(x,y,pivotX,pivotY
               ,width,height,src);
     this.ishit = false;
+    this.lastHit = 0;
+    this.hitSound = soundTable["enemyHit"];
+    this.deathSound = soundTable["enemyDead"];
+
   }
   draw(){
     super.draw()
   }
   update(){
     this.checkHit()
-
+    this.lastHit += deltaTime;
     super.update();
-
     //this.rotation = Math.pow(Math.sin(frame/10),5)/10;
     //up and down
     //this.x += Math.sin(frame/10)*3;
     //dont move through the player
     if ((this.x>player.x+300)&&!this.collides()){
       this.move()
-    }
+    }else if (this.x<player.x+300)
+      this.attack()
   }
   move(){
     this.x -= deltaTime/10;
+    this.rotation = Math.sin(frame/10)/10;
   }
   //when the enemy is hit
   hit(){
     //make the enemy bleed
-
-
     this.bleed()
+    this.takeDamage(sword.damage)
+    if (this.dead) return;
+    console.log(this.health)
+    //play the hit sound
+    this.hitSound.play()
     //make the enemy jump up
     this.jump()
+    this.moveLinear(50,0,0,100)
+   // this.x += 20;
     console.log("hit")
   }
   jump(){
+   super.jump()
+    //this.dieAnimation()
+  }
+  onDeath() {
+    this.dead = true;
+    this.playDeathSound()
     this.dieAnimation()
+    myGame.enemieCount--;
   }
 
   //check if the enemy is hit
@@ -785,7 +951,12 @@ class Enemy extends Character {
     //check if the enemy is hit
     if (this.collider == null) return;
     if (sword.collider.isColliding(this.collider)){
-      if (!this.ishit) this.hit();
+      if (!this.ishit&&this.lastHit>1000) {
+        this.hit();
+        this.lastHit = 0;
+      }
+
+
       this.ishit = true;
     }else {
       this.ishit = false;
@@ -796,10 +967,24 @@ class Enemy extends Character {
 
   }
   dieAnimation(){
-    //fade out
-    this.image.alpha -= 0.61;
+
+    //turn the enemy around
+    this.rotateTowards(Math.PI,0,1000,    this.destroy.bind(this));
+
+   //make the enemy fall down
+    this.affectedByGround = false;
+    this.gravity = 0.1;
+    this.velocity = 1;
 
   }
+
+  // use weapon to attack player when in range
+  attack(){
+      //attack the player
+      this.useWeapon();
+  }
+
+
 }
 
 
@@ -827,7 +1012,65 @@ class Hills extends GameObject {
 
 
 }
+//ui class
+class UI {
+  constructor(){
+    this.healthBar = new HealthBar(20,20,0,0,200,20);
+    this.healthBar.maxHealth = 100;
+    this.healthBar.health = 100;
+  }
+  draw(){
+    this.healthBar.draw();
+  }
+  update(){
+    this.healthBar.update();
+  }
+  showPopup(text){
+    this.popup = new Popup(text);
+  }
+  //game over
+  gameOver(){
+    this.showPopup("Game Over");
+  }
+}
+//popup class displays text on the screen as html elements
+class Popup {
+  constructor(text,id, callbackText, callback){
+    this.callback = callback;
+    this.text = text;
+    //add the popup to the canvas-holder
+    this.element = document.createElement("div");
+    //add the text as a p element
+    this.element.innerHTML = "<p>"+text+"</p>";
+    //add the id
+    this.element.id = id;
+    //add the button
+    this.element.innerHTML += "<button>"+callbackText+"</button>";
+    //add the callback
+    this.element.querySelector("button").addEventListener("click", this.callback,);
+//add a function to allso remove the popup when the button is clicked
+    this.element.querySelector("button").addEventListener("click", () => {
 
+      this.element.remove();
+    } );
+
+    //add the class
+
+    this.element.classList.add("popup");
+    //position the popup absolute
+
+    document.getElementById("canvas-holder").appendChild(this.element);
+
+
+  }
+
+}
+/*/create a popup
+const popup = new Popup("Game Over", "Restart", () => {
+  location.reload();  //reload the page");
+});
+
+ */
 //collision sphere
 class SphereCollider {
   constructor(radius){
@@ -840,6 +1083,7 @@ class SphereCollider {
 
   }
   draw(){
+   let ctx = myGame.ctx;
     ctx.beginPath();
     ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
     ctx.stroke();
@@ -870,21 +1114,35 @@ function rotate(x,y,angle){
 
 //spawner
 const spawner = {
+
   enemies : [],
+  particleSystems : [],
   count : 0,
+  i : 0,
   spawnEnemie: function () {
-    return new Enemy(1500,520,100,250,200,400,"img/metzger.png");
-  } ,
+
+    let bat = new Bat(0,0,18,180,36,200,"img/Bat.png");
+    bat.addCollider(new SphereCollider(20),0,-160);
+    let enemy = new Enemy(1500,520,100,250,200,400,"img/metzger.png");
+    enemy.addCollider(new SphereCollider(80),10,-20);
+    let particle =new ParticleSystem(100,100,1300);
+    particle.zIndex = this.i
+    enemy.addBlood(particle);
+    enemy.equip(bat,-30,-10,-10);
+    enemy.zIndex = this.i++;
+    myGame.reorganizeGameObjects()
+    return enemy;
+    } ,
 
   manageEnemies: function () {
     //create a new enemy every 2 seconds or when there are less than 3 enemies
-    if ( this.count>4000&& this.enemies.length<1){
+    if ( this.count>4000&& myGame.enemieCount<3 ){
       //spawn a new enemy
       let enemie = this.spawnEnemie();
       //add collider
-      let collider = new SphereCollider(80);
-      enemie.addCollider(collider,10);
-      this.enemies.push(enemie);
+
+      this.enemies[this.i%3] = enemie;
+      myGame.enemieCount++;
       this.count = 0;
     }
     this.count += deltaTime;
@@ -894,30 +1152,11 @@ const spawner = {
 
 
 //create a player
-const pigdeath = new sound("sounds/death.wav");
-const hills = new Hills(0,700,0,0,600,300,"img/hill1.png");
-const ground = new GameObject(0,620,0,0,canvas.width,groundheight, "green");
-const player = new Player(200,600,150,250,300,300,"img/Schweindal.png");
-const sword = new Sword(0,0,35,200,70,220,"img/Sword.png");
-const bat = new Bat(0,0,18,180,36,200,"img/Bat.png");
-const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
-const collider = new SphereCollider(50);
-const enemyCollider = new SphereCollider(80);
-const pigParticle = new ParticleSystem(0,0,130);
-player.addBlood(pigParticle,100,-100);
-bat.addCollider(new SphereCollider(20),0,-160);
-enemy.addCollider(enemyCollider,10,-40);
-sword.addCollider(new SphereCollider(10),0,-180);
-const healthbar = new HealthBar(20,15,100,50,200,20);
-player.equip(sword,40,10,95);
-player.addCollider(collider,100,-40 );
-enemy.equip(bat,-30,-10,-10);
-const particles = new ParticleSystem(100,100,1300);
-enemy.addBlood(particles,0,0);
+
 
 //enemy.addChild(particles);
-let lastTime = Date.now();
-updateUi()
+
+//updateUi()
 function animate(){
   //calculate the delta time
   let now = Date.now();
@@ -936,6 +1175,33 @@ function animate(){
 
   requestAnimationFrame(animate);
 }
+startGame();
+function init() {
+  const pigdeath = new sound("sounds/death.wav");
+// const hills = new Hills(0,700,0,0,600,300,"img/hill1.png");
+  var ground = new GameObject(0,620,0,0,canvas.width,groundheight, "green");
+  const player = new Player(200,600,150,250,300,300,"img/Schweindal.png");
+  const sword = new Sword(0,0,35,200,70,220,"img/Sword.png");
+  const bat = new Bat(0,0,18,180,36,200,"img/Bat.png");
+  const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
+  const collider = new SphereCollider(50);
+  const enemyCollider = new SphereCollider(80);
+  const pigParticle = new ParticleSystem(0,0,130);
+  player.addBlood(pigParticle,100,-100);
+  bat.addCollider(new SphereCollider(20),0,-160);
+  enemy.addCollider(enemyCollider,10,-40);
+  sword.addCollider(new SphereCollider(10),0,-180);
+  const healthbar = new HealthBar(20,15,100,50,200,20);
+  player.equip(sword,40,10,95);
+  player.addCollider(collider,100,-40 );
+  enemy.equip(bat,-30,-10,-10);
+  const particles = new ParticleSystem(100,100,1300);
+  enemy.addBlood(particles,0,0);
+
+}
+
+//react to key presses
 
 
-animate();
+//animate();
+

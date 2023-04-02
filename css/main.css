@@ -21,9 +21,10 @@ p {
   padding: 5px;
   /* make the size bigger */
   font-size: 1.2em;
-
-
+margin: 0;
 }
+
+
 /*center the canvas holder*/
 #canvas-holder {
   position: absolute;
@@ -40,6 +41,20 @@ p {
   top: 0;
   left: 0;
   z-index: 1;
+}
+
+.popup  {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+
+  background-color: rgba(255, 255, 255, 0.5);
+  width: 300px;
+  border: 1px solid black;
+  padding: 10px;
+  text-align: center;
 }
 
 
