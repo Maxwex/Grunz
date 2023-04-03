@@ -9,7 +9,6 @@ var bat;
 var ground;
 var sword;
 var healthbar;
-//const enemy = new Enemy(600,520,100,250,200,400,"img/metzger.png");
 //create a popup function with a restart button
 
 
@@ -34,10 +33,13 @@ var myGame;
 
 //create a sound table
 var soundTable = {
+  "pigHit": new sound("sounds/pigHit.mp3"),
   "pigdeath": new sound("sounds/death.wav"),
   "enemyHit": new sound("sounds/enemyHit.mp3"),
   "enemyDead": new sound("sounds/enemyDead.mp3"),
+  "bloodSplat1": new sound("sounds/bloodSplat1.mp3"),
 }
+
 function sound(src) {
   this.sound = document.createElement("audio");
   this.sound.src = src;
@@ -55,9 +57,9 @@ function sound(src) {
 //function to start the game
 function startGame(){
   myGame = new Game(1200,700);
-  myGame.start(myGame);
-  soundTable["pigdeath"].play();
+
   initializeGameObjects();
+  myGame.start(myGame);
 }
 
 function initializeGameObjects(){
@@ -91,6 +93,7 @@ class Game{
     this.weaponList = [];
 
     this.enemieCount = 0;
+    this.killedEnemies = 0;
     this.over = false;
 
   }
@@ -126,7 +129,11 @@ class Game{
       myGame.updateGameobjects();
 
 
-      if (myGame.over) return;
+      if (myGame.over){
+        updateUi()
+        return;
+      }
+
 
       requestAnimationFrame(gameLoop);
     }
@@ -136,6 +143,7 @@ class Game{
     this.gameObjectsList = [];
     this.weaponList = [];
     this.enemieCount = 0;
+    this.killedEnemies = 0;
     this.over = false;
     initializeGameObjects();
     this.start();
@@ -164,7 +172,9 @@ function updateUi(){
   ctxUI.fillRect(0,0,myGame.canvasUI.width,50);
   ctxUI.fillStyle = "white";
   ctxUI.font = "20px Arial";
-  //healthbar.draw();
+  //show number of killed enemies on right side of the screen
+  ctxUI.fillText("Killed Enemies: " + myGame.killedEnemies, myGame.canvasUI.width - 200, 30);
+  healthbar.draw();
 }
 
 
@@ -354,18 +364,7 @@ class GameObject {
     }
     ctx.restore();
   }
-  drawInfront (){
-    ctx.save();
-    ctx.translate(this.x+this.pivotX,this.y+this.pivotY);
-    ctx.rotate(this.rotation);
 
-    ctx.drawImage(this.image,-this.pivotX,-this.pivotY,this.width,this.height);
-    if (debug){
-      ctx.fillStyle = "red";
-      ctx.fillRect(0,0,5,5);
-    }
-    ctx.restore();
-  }
   update(){
 
     this.draw();
@@ -422,7 +421,6 @@ class Character extends GameObject{
       this.dead = true;
       this.onDeath();
 
-
     }else{
       this.health-=damage;
     }
@@ -436,8 +434,6 @@ class Character extends GameObject{
   }
   draw(){
    super.draw();
-
-
   }
 
   update(){
@@ -473,9 +469,7 @@ class Character extends GameObject{
     this.blood = blood;
     this.equip(blood,pivotX,pivotY)
   }
-  onHit(damage){
-    console.log("ouch");
-  }
+
   bleed(){
     if (this.blood == null) return;
     this.blood.start()
@@ -506,7 +500,8 @@ class Player extends Character {
               ,width,height,src){
     super(x,y,pivotX,pivotY
               ,width,height,src);
-    //this.deathSound = pigdeath;
+    this.deathSound = soundTable["pigdeath"];
+    this.hitSound = soundTable["pigHit"];
   }
 
   draw(){
@@ -556,6 +551,7 @@ class Player extends Character {
   takeDamage(damage) {
       super.takeDamage(damage);
       healthbar.health = this.health;
+      this.hitSound.play();
       this.bleed();
       updateUi()
   }
@@ -898,6 +894,7 @@ class Enemy extends Character {
     this.lastHit = 0;
     this.hitSound = soundTable["enemyHit"];
     this.deathSound = soundTable["enemyDead"];
+    this.bleedSound = soundTable["bloodSplat1"];
 
   }
   draw(){
@@ -924,6 +921,7 @@ class Enemy extends Character {
   hit(){
     //make the enemy bleed
     this.bleed()
+    this.bleedSound.play()
     this.takeDamage(sword.damage)
     if (this.dead) return;
     console.log(this.health)
@@ -931,9 +929,8 @@ class Enemy extends Character {
     this.hitSound.play()
     //make the enemy jump up
     this.jump()
-    this.moveLinear(50,0,0,100)
+    this.moveLinear(60,0,0,100)
    // this.x += 20;
-    console.log("hit")
   }
   jump(){
    super.jump()
@@ -944,6 +941,8 @@ class Enemy extends Character {
     this.playDeathSound()
     this.dieAnimation()
     myGame.enemieCount--;
+    myGame.killedEnemies++;
+    updateUi()
   }
 
   //check if the enemy is hit
@@ -951,7 +950,7 @@ class Enemy extends Character {
     //check if the enemy is hit
     if (this.collider == null) return;
     if (sword.collider.isColliding(this.collider)){
-      if (!this.ishit&&this.lastHit>1000) {
+      if (!this.ishit&&this.lastHit>800) {
         this.hit();
         this.lastHit = 0;
       }
