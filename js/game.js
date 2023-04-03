@@ -24,7 +24,9 @@ document.addEventListener("keydown", function(event){
 
 }
 );
-
+document.getElementById('canvasUI').ontouchstart = function (eve) {
+  player.useWeapon()
+}
 
 var deltaTime = 0;
 let lastTime = Date.now();
