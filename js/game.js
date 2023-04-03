@@ -1,7 +1,7 @@
 //create a canvas
 //debug mode
 const debug = false;
-let frame = 0;
+let timePassed = 0;
 const groundheight = 150;
 
 var player;
@@ -118,7 +118,7 @@ class Game{
       //
       deltaTime = Date.now() - lastTime;
       lastTime = Date.now();
-      frame++;
+      timePassed+= deltaTime;
 
       myGame.drawBackground();
       spawner.manageEnemies()
@@ -444,7 +444,7 @@ class Character extends GameObject{
     super.update();
     this.velocity += this.gravity;
     if (this.ypos>this.y+this.velocity||!this.affectedByGround){
-      this.y+=this.velocity;
+      this.y+=this.velocity*deltaTime/20;
       this.grounded = false;
     }else {
       this.y = this.ypos;
@@ -527,9 +527,9 @@ class Player extends Character {
   //wiggly walking animation
   walk(){
     //wiggle forward and back
-    this.rotation = Math.sin(frame/10)/15;
+    this.rotation = Math.sin(timePassed/200)/15;
     //up and down
-    this.y += Math.sin(frame/10)|0;
+    this.y += Math.sin(timePassed/100)|0;
   }
   checkCollision(){
     //loop through all the weapons
@@ -866,7 +866,7 @@ class Sword extends Weapon {
   }
   animate(){
     //punch the sword forward
-    this.rotation += Math.sin(frame/10)/30
+    this.rotation += Math.sin(timePassed/10)/30
 
   }
   strike() {
@@ -918,7 +918,7 @@ class Enemy extends Character {
   }
   move(){
     this.x -= deltaTime/10;
-    this.rotation = Math.sin(frame/10)/10;
+    this.rotation = Math.sin(timePassed/200)/10;
   }
   //when the enemy is hit
   hit(){
@@ -1163,7 +1163,7 @@ function animate(){
   deltaTime = now - lastTime;
   lastTime = now;
   //spawner.manageEnemies()
-  frame++;
+  timePassed++;
   ctx.fillStyle = "skyblue";
   ctx.fillRect(0,0,canvas.width,canvas.height);
   //read the input
